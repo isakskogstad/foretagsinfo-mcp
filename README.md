@@ -126,12 +126,16 @@ Add to your Claude Desktop MCP config (`claude_desktop_config.json`):
 {
   "mcpServers": {
     "personupplysning": {
-      "type": "http",
-      "url": "https://personupplysning-mcp.onrender.com/mcp"
+      "type": "sse",
+      "url": "https://personupplysning-mcp.onrender.com/sse"
     }
   }
 }
 ```
+
+**Note:** The server uses SSE (Server-Sent Events) transport with two endpoints:
+- `GET /sse` - Establishes SSE connection
+- `POST /messages?sessionId=<id>` - Sends JSON-RPC messages
 
 ## 📁 Project Structure
 
