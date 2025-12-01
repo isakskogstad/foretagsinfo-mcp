@@ -1,0 +1,134 @@
+{
+  "timestamp": "2025-12-01T06:38:47.688Z",
+  "summary": {
+    "total": 14,
+    "passed": 3,
+    "failed": 11,
+    "critical": 1,
+    "high": 5,
+    "medium": 5,
+    "low": 0
+  },
+  "results": [
+    {
+      "testName": "SQL Injection Prevention",
+      "category": "Injection",
+      "passed": true,
+      "severity": "INFO",
+      "finding": "10/10 SQL injection attempts blocked",
+      "recommendation": "Continue using parameterized queries and input validation"
+    },
+    {
+      "testName": "XSS Prevention",
+      "category": "Injection",
+      "passed": false,
+      "severity": "HIGH",
+      "finding": "XSS payload was accepted: \"<body onload=alert('XSS')>\"",
+      "recommendation": "Add HTML tag and JavaScript event handler detection",
+      "evidence": "<body onload=alert('XSS')>"
+    },
+    {
+      "testName": "XSS Prevention",
+      "category": "Injection",
+      "passed": false,
+      "severity": "HIGH",
+      "finding": "XSS payload was accepted: \"<svg/onload=alert('XSS')>\"",
+      "recommendation": "Add HTML tag and JavaScript event handler detection",
+      "evidence": "<svg/onload=alert('XSS')>"
+    },
+    {
+      "testName": "XSS Prevention",
+      "category": "Injection",
+      "passed": false,
+      "severity": "HIGH",
+      "finding": "XSS payload was accepted: \"'-alert(1)-'\"",
+      "recommendation": "Add HTML tag and JavaScript event handler detection",
+      "evidence": "'-alert(1)-'"
+    },
+    {
+      "testName": "XSS Prevention",
+      "category": "Injection",
+      "passed": false,
+      "severity": "HIGH",
+      "finding": "XSS payload was accepted: \"<input onfocus=alert('XSS') autofocus>\"",
+      "recommendation": "Add HTML tag and JavaScript event handler detection",
+      "evidence": "<input onfocus=alert('XSS') autofocus>"
+    },
+    {
+      "testName": "XSS Prevention",
+      "category": "Injection",
+      "passed": false,
+      "severity": "HIGH",
+      "finding": "6/10 XSS attempts blocked",
+      "recommendation": "Strengthen XSS filters and implement Content Security Policy"
+    },
+    {
+      "testName": "Organization Number Validation",
+      "category": "Input Validation",
+      "passed": false,
+      "severity": "MEDIUM",
+      "finding": "Valid org number rejected: \"5560001712\"",
+      "recommendation": "Review validation logic for false positives",
+      "evidence": "Valid org number"
+    },
+    {
+      "testName": "Organization Number Validation",
+      "category": "Input Validation",
+      "passed": false,
+      "severity": "MEDIUM",
+      "finding": "Valid org number rejected: \"556000-1712\"",
+      "recommendation": "Review validation logic for false positives",
+      "evidence": "Valid org number with hyphen"
+    },
+    {
+      "testName": "Organization Number Validation",
+      "category": "Input Validation",
+      "passed": false,
+      "severity": "MEDIUM",
+      "finding": "Invalid org number accepted: \"0000000000\"",
+      "recommendation": "Verify Luhn checksum algorithm implementation",
+      "evidence": "Invalid checksum (all zeros)"
+    },
+    {
+      "testName": "Organization Number Validation",
+      "category": "Input Validation",
+      "passed": false,
+      "severity": "MEDIUM",
+      "finding": "Invalid org number accepted: \"9999999999\"",
+      "recommendation": "Verify Luhn checksum algorithm implementation",
+      "evidence": "Invalid checksum (all nines)"
+    },
+    {
+      "testName": "Organization Number Validation",
+      "category": "Input Validation",
+      "passed": false,
+      "severity": "MEDIUM",
+      "finding": "6/10 validation tests passed",
+      "recommendation": "Review and fix validation logic"
+    },
+    {
+      "testName": "Search Query Length Limits",
+      "category": "Input Validation",
+      "passed": true,
+      "severity": "INFO",
+      "finding": "6/6 length limit tests passed",
+      "recommendation": "Length limits are correctly enforced"
+    },
+    {
+      "testName": "Error Information Leakage",
+      "category": "Sensitive Data Exposure",
+      "passed": true,
+      "severity": "INFO",
+      "finding": "Error messages should be tested in runtime to ensure no sensitive data leakage",
+      "recommendation": "Ensure error messages in production do not expose stack traces, file paths, or credentials"
+    },
+    {
+      "testName": "Environment Variable Security",
+      "category": "Configuration",
+      "passed": false,
+      "severity": "CRITICAL",
+      "finding": "Some environment variables are missing or misconfigured",
+      "recommendation": "Ensure all credentials are stored securely and not committed to version control"
+    }
+  ]
+}
