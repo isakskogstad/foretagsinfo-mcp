@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "MCP server för personuppgifter och företagssökning i Sverige",
   "type": "module",
-  "main": "dist/index.js",
+  "main": "dist/http-server.js",
   "scripts": {
     "build": "tsc",
     "postinstall": "npm run build",

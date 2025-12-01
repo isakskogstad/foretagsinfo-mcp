@@ -24,7 +24,7 @@ import 'dotenv/config';
 
 // Server info
 const SERVER_NAME = 'personupplysning-mcp';
-const SERVER_VERSION = '0.1.0';
+const SERVER_VERSION = '0.1.1';
 const PORT = process.env.PORT || 3000;
 
 // Validate environment on startup
