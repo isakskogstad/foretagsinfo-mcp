@@ -9,7 +9,7 @@
  * 4. Return data
  */
 
-import { BolagsverketClient, BolagsverketDokument } from '../clients/bolagsverket-api';
+import { BolagsverketClient, BolagsverketDokument } from '../clients/bolagsverket-api.js';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import 'dotenv/config';
 
