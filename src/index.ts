@@ -282,6 +282,9 @@ async function startHTTPServer() {
   // Create MCP server once (not per request!)
   const mcpServer = createServer();
 
+  // Store transports by session ID
+  const transports: Record<string, SSEServerTransport> = {};
+
   const httpServer = http.createServer(async (req, res) => {
     // Health check endpoint
     if (req.url === '/health' || req.url === '/') {
@@ -291,7 +294,10 @@ async function startHTTPServer() {
         server: SERVER_NAME,
         version: SERVER_VERSION,
         uptime: process.uptime(),
-        endpoint: '/mcp',
+        endpoints: {
+          sse: '/sse',
+          messages: '/messages'
+        },
         environment: {
           SUPABASE_URL: process.env.SUPABASE_URL ? 'configured' : 'missing',
           SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY ? 'configured' : 'missing',
@@ -302,13 +308,45 @@ async function startHTTPServer() {
       return;
     }
 
-    // MCP endpoint with SSE transport
-    if (req.url === '/mcp') {
-      // SSEServerTransport handles the entire request/response cycle
-      const transport = new SSEServerTransport('/mcp', res);
-      await mcpServer.connect(transport);
+    // SSE endpoint - Creates transport and keeps connection open
+    if (req.url === '/sse' && req.method === 'GET') {
+      console.log('SSE connection established');
+      const transport = new SSEServerTransport('/messages', res);
 
-      // Handle request body
+      // Store transport by session ID
+      transports[transport.sessionId] = transport;
+
+      // Clean up on close
+      res.on('close', () => {
+        console.log(`SSE connection closed: ${transport.sessionId}`);
+        delete transports[transport.sessionId];
+      });
+
+      // Connect server to transport
+      await mcpServer.connect(transport);
+      return;
+    }
+
+    // Messages endpoint - Handles incoming JSON-RPC messages
+    if (req.url?.startsWith('/messages') && req.method === 'POST') {
+      // Extract session ID from query parameter
+      const url = new URL(req.url, `http://${req.headers.host}`);
+      const sessionId = url.searchParams.get('sessionId');
+
+      if (!sessionId) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Missing sessionId parameter' }));
+        return;
+      }
+
+      const transport = transports[sessionId];
+      if (!transport) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Session not found' }));
+        return;
+      }
+
+      // Read request body
       let body = '';
       req.on('data', (chunk) => {
         body += chunk.toString();
@@ -317,10 +355,10 @@ async function startHTTPServer() {
       req.on('end', async () => {
         try {
           const message = JSON.parse(body);
-          // Send the message through transport
-          await transport.handlePostMessage(message, res);
+          console.log('Received message:', message.method);
+          await transport.handlePostMessage(req, res, message);
         } catch (error) {
-          console.error('Error handling MCP message:', error);
+          console.error('Error handling message:', error);
           if (!res.headersSent) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
@@ -336,13 +374,21 @@ async function startHTTPServer() {
 
     // 404 for other routes
     res.writeHead(404, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Not found', endpoints: { health: '/', mcp: '/mcp' } }));
+    res.end(JSON.stringify({
+      error: 'Not found',
+      endpoints: {
+        health: '/',
+        sse: '/sse',
+        messages: '/messages?sessionId=<session-id>'
+      }
+    }));
   });
 
   httpServer.listen(PORT, HOST, () => {
     console.log(`✓ ${SERVER_NAME} v${SERVER_VERSION} running on http://${HOST}:${PORT}`);
     console.log(`✓ Health check: http://${HOST}:${PORT}/health`);
-    console.log(`✓ MCP endpoint: http://${HOST}:${PORT}/mcp`);
+    console.log(`✓ SSE endpoint: http://${HOST}:${PORT}/sse`);
+    console.log(`✓ Messages endpoint: http://${HOST}:${PORT}/messages`);
     console.log('Environment:', {
       NODE_ENV: process.env.NODE_ENV || 'development',
       SUPABASE_URL: process.env.SUPABASE_URL ? '✓ configured' : '✗ missing',
