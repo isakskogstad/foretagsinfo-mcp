@@ -279,6 +279,9 @@ async function startHTTPServer() {
   const PORT = parseInt(process.env.PORT || '3000');
   const HOST = process.env.HOST || '0.0.0.0';
 
+  // Create MCP server once (not per request!)
+  const mcpServer = createServer();
+
   const httpServer = http.createServer(async (req, res) => {
     // Health check endpoint
     if (req.url === '/health' || req.url === '/') {
@@ -300,26 +303,31 @@ async function startHTTPServer() {
     }
 
     // MCP endpoint with SSE transport
-    if (req.url === '/mcp' && req.method === 'POST') {
-      const server = createServer();
+    if (req.url === '/mcp') {
+      // SSEServerTransport handles the entire request/response cycle
       const transport = new SSEServerTransport('/mcp', res);
+      await mcpServer.connect(transport);
 
-      await server.connect(transport);
-
-      // Read request body
+      // Handle request body
       let body = '';
-      req.on('data', chunk => {
+      req.on('data', (chunk) => {
         body += chunk.toString();
       });
 
       req.on('end', async () => {
         try {
           const message = JSON.parse(body);
-          // Handle the message through transport
-          // SSE transport will handle the response
+          // Send the message through transport
+          await transport.handlePostMessage(message, res);
         } catch (error) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Invalid JSON' }));
+          console.error('Error handling MCP message:', error);
+          if (!res.headersSent) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              error: 'Invalid request',
+              message: error instanceof Error ? error.message : 'Unknown error'
+            }));
+          }
         }
       });
 

@@ -116,7 +116,7 @@ BOLAGSVERKET_CLIENT_SECRET=<your-client-secret>
 
 4. **Deploy:**
    - Render will automatically build and deploy
-   - Your MCP server will be available at: `https://your-service.onrender.com/mcp`
+   - Your MCP server will be available at: `https://personupplysning-mcp.onrender.com/mcp`
 
 ### Connect from Claude Desktop
 
@@ -127,7 +127,7 @@ Add to your Claude Desktop MCP config (`claude_desktop_config.json`):
   "mcpServers": {
     "personupplysning": {
       "type": "http",
-      "url": "https://your-service.onrender.com/mcp"
+      "url": "https://personupplysning-mcp.onrender.com/mcp"
     }
   }
 }
@@ -138,22 +138,30 @@ Add to your Claude Desktop MCP config (`claude_desktop_config.json`):
 ```
 personupplysning/
 ├── src/
-│   ├── index.ts              # HTTP/stdio MCP server
+│   ├── index.ts                    # HTTP/stdio MCP server
 │   ├── clients/
-│   │   └── bolagsverket-api.ts  # Bolagsverket API client
+│   │   ├── bolagsverket-api.ts     # Bolagsverket API client
+│   │   └── __tests__/              # API client tests
 │   └── services/
-│       └── company-data-service.ts  # Cache-first service layer
+│       └── company-data-service.ts # Cache-first service layer
 ├── scripts/
-│   ├── setup-supabase.ts     # Database setup
-│   ├── import-parquet.ts     # Import 1.85M companies
-│   └── download-annual-report.ts  # Test script
-├── data/
-│   └── sample-reports/       # Downloaded iXBRL files
-├── supabase/
-│   └── migrations/           # SQL migrations
-├── render.yaml               # Render deployment config
-├── .env.example             # Environment template
-└── package.json
+│   ├── setup-supabase.ts           # Database setup
+│   ├── import-parquet.ts           # Import 1.85M companies
+│   ├── download-annual-report.ts   # Example script
+│   ├── check-tables.ts             # Utility: Check tables
+│   ├── verify-import.ts            # Utility: Verify imports
+│   └── schema.sql                  # Database schema
+├── sql/
+│   ├── 002-create-cache-tables.sql # Cache tables migration
+│   └── 003-create-storage-bucket.sql # Storage setup
+├── tests/
+│   └── test-supabase.ts            # Supabase connection test
+├── docs/
+│   └── CACHING-ARCHITECTURE.md     # Architecture documentation
+├── render.yaml                      # Render deployment config
+├── .env.example                    # Environment template
+├── tsconfig.json                   # TypeScript configuration
+└── package.json                    # Project dependencies
 ```
 
 ## 🔧 Configuration
@@ -244,7 +252,7 @@ npx tsx scripts/download-annual-report.ts
 
 Check endpoint:
 ```bash
-curl https://your-service.onrender.com/health
+curl https://personupplysning-mcp.onrender.com/health
 ```
 
 Expected response:
