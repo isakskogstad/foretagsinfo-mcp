@@ -314,7 +314,7 @@ app.post('/mcp', async (req, res) => {
 
           case 'get_company_documents': {
             const validated = validateInput(GetCompanyDocumentsInputSchema, args);
-            const documents = await companyDataService.getCompanyDocuments(
+            const documents = await companyDataService.getDocumentList(
               validated.organisationsidentitet
             );
             result = {
@@ -437,7 +437,7 @@ app.post('/mcp', async (req, res) => {
           content = await companyDataService.getCompanyDetails(orgId);
         } else if (path.match(/^\/\d{10}\/documents$/)) {
           const orgId = path.split('/')[1];
-          content = await companyDataService.getCompanyDocuments(orgId);
+          content = await companyDataService.getDocumentList(orgId);
         } else if (path.match(/^\/\d{10}\/report\/\d{4}$/)) {
           const parts = path.split('/');
           const orgId = parts[1];
@@ -580,7 +580,7 @@ app.post('/mcp', async (req, res) => {
       },
     });
   } catch (error) {
-    serverLogger.error('Error handling request:', error);
+    serverLogger.error({ error }, 'Error handling request');
     // JSON-RPC errors use HTTP 200 (application-level error)
     return res.status(200).json({
       jsonrpc: '2.0',
