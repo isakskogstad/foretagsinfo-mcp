@@ -274,11 +274,16 @@ function createServer(): Server {
 
 /**
  * Start server in HTTP mode (for Render deployment)
- * Pattern based on Kolada-MCP implementation
  */
 async function startHTTPServer() {
   const PORT = parseInt(process.env.PORT || '3000');
   const HOST = process.env.HOST || '0.0.0.0';
+
+  // Create MCP server once (not per request!)
+  const mcpServer = createServer();
+
+  // Store transports by session ID
+  const transports: Record<string, SSEServerTransport> = {};
 
   const httpServer = http.createServer(async (req, res) => {
     // Health check endpoint
@@ -289,7 +294,10 @@ async function startHTTPServer() {
         server: SERVER_NAME,
         version: SERVER_VERSION,
         uptime: process.uptime(),
-        endpoint: '/mcp',
+        endpoints: {
+          sse: '/sse',
+          messages: '/messages'
+        },
         environment: {
           SUPABASE_URL: process.env.SUPABASE_URL ? 'configured' : 'missing',
           SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY ? 'configured' : 'missing',
@@ -300,34 +308,68 @@ async function startHTTPServer() {
       return;
     }
 
-    // MCP endpoint - Supports both GET (SSE) and POST (JSON-RPC)
-    if (req.url === '/mcp') {
-      // GET /mcp - SSE transport for streaming
-      if (req.method === 'GET') {
-        console.log('MCP SSE connection established');
+    // SSE endpoint - Creates transport and keeps connection open
+    if (req.url === '/sse' && req.method === 'GET') {
+      console.log('SSE connection established');
+      const transport = new SSEServerTransport('/messages', res);
 
-        // Create new server instance per connection
-        const server = createServer();
-        const transport = new SSEServerTransport('/mcp', res);
+      // Store transport by session ID
+      transports[transport.sessionId] = transport;
 
-        await server.connect(transport);
+      // Clean up on close
+      res.on('close', () => {
+        console.log(`SSE connection closed: ${transport.sessionId}`);
+        delete transports[transport.sessionId];
+      });
 
-        req.on('close', () => {
-          console.log('MCP SSE connection closed');
-        });
+      // Connect server to transport
+      await mcpServer.connect(transport);
+      return;
+    }
 
+    // Messages endpoint - Handles incoming JSON-RPC messages
+    if (req.url?.startsWith('/messages') && req.method === 'POST') {
+      // Extract session ID from query parameter
+      const url = new URL(req.url, `http://${req.headers.host}`);
+      const sessionId = url.searchParams.get('sessionId');
+
+      if (!sessionId) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Missing sessionId parameter' }));
         return;
       }
 
-      // POST /mcp - Direct JSON-RPC (not implemented yet, but reserved)
-      if (req.method === 'POST') {
-        res.writeHead(501, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          error: 'JSON-RPC mode not implemented',
-          message: 'Use SSE transport (GET /mcp) instead'
-        }));
+      const transport = transports[sessionId];
+      if (!transport) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Session not found' }));
         return;
       }
+
+      // Read request body
+      let body = '';
+      req.on('data', (chunk) => {
+        body += chunk.toString();
+      });
+
+      req.on('end', async () => {
+        try {
+          const message = JSON.parse(body);
+          console.log('Received message:', message.method);
+          await transport.handlePostMessage(req, res, message);
+        } catch (error) {
+          console.error('Error handling message:', error);
+          if (!res.headersSent) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              error: 'Invalid request',
+              message: error instanceof Error ? error.message : 'Unknown error'
+            }));
+          }
+        }
+      });
+
+      return;
     }
 
     // 404 for other routes
@@ -336,7 +378,8 @@ async function startHTTPServer() {
       error: 'Not found',
       endpoints: {
         health: '/',
-        mcp: '/mcp (GET for SSE, POST for JSON-RPC)'
+        sse: '/sse',
+        messages: '/messages?sessionId=<session-id>'
       }
     }));
   });
@@ -344,7 +387,8 @@ async function startHTTPServer() {
   httpServer.listen(PORT, HOST, () => {
     console.log(`✓ ${SERVER_NAME} v${SERVER_VERSION} running on http://${HOST}:${PORT}`);
     console.log(`✓ Health check: http://${HOST}:${PORT}/health`);
-    console.log(`✓ MCP endpoint: http://${HOST}:${PORT}/mcp`);
+    console.log(`✓ SSE endpoint: http://${HOST}:${PORT}/sse`);
+    console.log(`✓ Messages endpoint: http://${HOST}:${PORT}/messages`);
     console.log('Environment:', {
       NODE_ENV: process.env.NODE_ENV || 'development',
       SUPABASE_URL: process.env.SUPABASE_URL ? '✓ configured' : '✗ missing',
