@@ -1,0 +1,43 @@
+{
+  "name": "personupplysning-mcp",
+  "version": "0.1.0",
+  "description": "MCP server för personuppgifter och företagssökning i Sverige",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest",
+    "db:setup": "tsx scripts/setup-supabase.ts",
+    "db:import": "tsx scripts/import-parquet.ts",
+    "test:supabase": "tsx tests/test-supabase.ts"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "bolagsverket",
+    "personuppgifter",
+    "företagsdata",
+    "sweden"
+  ],
+  "author": "Isak Skogstad",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "@supabase/supabase-js": "^2.49.2",
+    "axios": "^1.13.2",
+    "csv-parse": "^6.1.0",
+    "dotenv": "^16.4.7",
+    "pino": "^9.5.0",
+    "pino-pretty": "^13.0.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.11.10",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: personupplysning-mcp
+    runtime: node
+    region: frankfurt  # EU region för GDPR compliance
+    plan: starter
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MCP_TRANSPORT
+        value: http
+      - key: PORT
+        generateValue: true
+      - key: HOST
+        value: 0.0.0.0
+      # Supabase credentials (add these in Render dashboard)
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      # Bolagsverket API credentials (add these in Render dashboard)
+      - key: BOLAGSVERKET_CLIENT_ID
+        sync: false
+      - key: BOLAGSVERKET_CLIENT_SECRET
+        sync: false
