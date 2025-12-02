@@ -292,9 +292,8 @@ async function handleMCPGet(req: IncomingMessage, res: ServerResponse): Promise<
   const server = createMCPServer();
   const transport = new SSEServerTransport('/mcp', res);
 
-  // Get the sessionId from transport after it's created
-  // SSEServerTransport generates a sessionId internally
-  const sessionId = (transport as unknown as { _sessionId: string })._sessionId;
+  // Get the sessionId from transport's public getter
+  const sessionId = transport.sessionId;
   logger.info({ sessionId }, 'New MCP SSE connection');
 
   activeConnections.set(sessionId, transport);
