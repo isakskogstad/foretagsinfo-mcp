@@ -1,39 +1,37 @@
 /**
- * Custom Error Classes for MCP Server
- * Provides structured error handling with error codes and request IDs
+ * Custom error classes for Företagsinfo MCP
  */
 
 export enum ErrorCode {
-  // Client errors (4xx)
+  // Input validation
   INVALID_INPUT = 'INVALID_INPUT',
-  COMPANY_NOT_FOUND = 'COMPANY_NOT_FOUND',
   INVALID_ORG_NUMBER = 'INVALID_ORG_NUMBER',
-  INVALID_YEAR = 'INVALID_YEAR',
-  NO_DOCUMENTS_FOUND = 'NO_DOCUMENTS_FOUND',
+  INVALID_CHECKSUM = 'INVALID_CHECKSUM',
 
-  // Server errors (5xx)
-  INTERNAL_ERROR = 'INTERNAL_ERROR',
+  // API errors
   API_ERROR = 'API_ERROR',
-  DATABASE_ERROR = 'DATABASE_ERROR',
-  CACHE_ERROR = 'CACHE_ERROR',
-  STORAGE_ERROR = 'STORAGE_ERROR',
-
-  // Configuration errors
-  MISSING_CONFIG = 'MISSING_CONFIG',
-  INVALID_CONFIG = 'INVALID_CONFIG',
-
-  // External API errors
-  BOLAGSVERKET_ERROR = 'BOLAGSVERKET_ERROR',
   AUTH_ERROR = 'AUTH_ERROR',
   RATE_LIMIT_ERROR = 'RATE_LIMIT_ERROR',
+  NOT_FOUND = 'NOT_FOUND',
+
+  // Document errors
+  DOCUMENT_NOT_FOUND = 'DOCUMENT_NOT_FOUND',
+  PARSE_ERROR = 'PARSE_ERROR',
+
+  // Server errors
+  INTERNAL_ERROR = 'INTERNAL_ERROR',
+  TIMEOUT_ERROR = 'TIMEOUT_ERROR',
 }
 
 export interface ErrorMetadata {
+  orgNumber?: string;
+  endpoint?: string;
+  statusCode?: number;
   [key: string]: unknown;
 }
 
 /**
- * Base MCP Error class with structured error information
+ * Base MCP Error class with request tracking
  */
 export class MCPError extends Error {
   public readonly code: ErrorCode;
@@ -43,8 +41,8 @@ export class MCPError extends Error {
   public readonly timestamp: string;
 
   constructor(
-    code: ErrorCode,
     message: string,
+    code: ErrorCode = ErrorCode.INTERNAL_ERROR,
     statusCode: number = 500,
     requestId?: string,
     metadata?: ErrorMetadata
@@ -57,114 +55,100 @@ export class MCPError extends Error {
     this.metadata = metadata;
     this.timestamp = new Date().toISOString();
 
-    // Maintains proper stack trace for where our error was thrown (only available on V8)
+    // Maintain proper stack trace in V8
     if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, MCPError);
+      Error.captureStackTrace(this, this.constructor);
     }
   }
 
-  /**
-   * Convert error to safe JSON response (no stack trace in production)
-   */
-  toJSON(includeSensitive: boolean = false): object {
-    const base = {
-      error: {
-        code: this.code,
-        message: this.message,
-        statusCode: this.statusCode,
-        requestId: this.requestId,
-        timestamp: this.timestamp,
-        ...(this.metadata && { metadata: this.metadata }),
-      },
+  toJSON(includeStack = false): Record<string, unknown> {
+    return {
+      error: true,
+      code: this.code,
+      message: this.message,
+      statusCode: this.statusCode,
+      requestId: this.requestId,
+      timestamp: this.timestamp,
+      ...(includeStack && process.env.NODE_ENV !== 'production' && { stack: this.stack }),
     };
+  }
 
-    if (includeSensitive) {
-      return {
-        ...base,
-        error: {
-          ...base.error,
-          stack: this.stack,
+  toMCPResponse(): { content: Array<{ type: 'text'; text: string }>; isError: true } {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(this.toJSON(), null, 2),
         },
-      };
-    }
-
-    return base;
+      ],
+      isError: true,
+    };
   }
 }
 
 /**
- * Validation Error (4xx)
+ * Validation error for invalid inputs
  */
 export class ValidationError extends MCPError {
   constructor(message: string, requestId?: string, metadata?: ErrorMetadata) {
-    super(ErrorCode.INVALID_INPUT, message, 400, requestId, metadata);
+    super(message, ErrorCode.INVALID_INPUT, 400, requestId, metadata);
     this.name = 'ValidationError';
   }
 }
 
 /**
- * Not Found Error (404)
+ * Invalid org number format or checksum
+ */
+export class InvalidOrgNumberError extends MCPError {
+  constructor(orgNumber: string, reason: string, requestId?: string) {
+    super(
+      `Invalid org number "${orgNumber}": ${reason}`,
+      ErrorCode.INVALID_ORG_NUMBER,
+      400,
+      requestId,
+      { orgNumber }
+    );
+    this.name = 'InvalidOrgNumberError';
+  }
+}
+
+/**
+ * Bolagsverket API error
+ */
+export class BolagsverketAPIError extends MCPError {
+  constructor(
+    message: string,
+    statusCode: number = 500,
+    requestId?: string,
+    metadata?: ErrorMetadata
+  ) {
+    super(message, ErrorCode.API_ERROR, statusCode, requestId, metadata);
+    this.name = 'BolagsverketAPIError';
+  }
+}
+
+/**
+ * Company or document not found
  */
 export class NotFoundError extends MCPError {
-  constructor(message: string, requestId?: string, metadata?: ErrorMetadata) {
-    super(ErrorCode.COMPANY_NOT_FOUND, message, 404, requestId, metadata);
+  constructor(resource: string, identifier: string, requestId?: string) {
+    super(
+      `${resource} not found: ${identifier}`,
+      ErrorCode.NOT_FOUND,
+      404,
+      requestId,
+      { resource, identifier }
+    );
     this.name = 'NotFoundError';
   }
 }
 
 /**
- * API Error (502)
+ * iXBRL parsing error
  */
-export class APIError extends MCPError {
+export class ParseError extends MCPError {
   constructor(message: string, requestId?: string, metadata?: ErrorMetadata) {
-    super(ErrorCode.API_ERROR, message, 502, requestId, metadata);
-    this.name = 'APIError';
+    super(message, ErrorCode.PARSE_ERROR, 500, requestId, metadata);
+    this.name = 'ParseError';
   }
-}
-
-/**
- * Configuration Error (500)
- */
-export class ConfigurationError extends MCPError {
-  constructor(message: string, requestId?: string, metadata?: ErrorMetadata) {
-    super(ErrorCode.MISSING_CONFIG, message, 500, requestId, metadata);
-    this.name = 'ConfigurationError';
-  }
-}
-
-/**
- * Bolagsverket API specific error
- */
-export class BolagsverketError extends MCPError {
-  constructor(message: string, statusCode: number = 502, requestId?: string, metadata?: ErrorMetadata) {
-    super(ErrorCode.BOLAGSVERKET_ERROR, message, statusCode, requestId, metadata);
-    this.name = 'BolagsverketError';
-  }
-}
-
-/**
- * Convert unknown error to MCPError
- */
-export function toMCPError(error: unknown, requestId?: string): MCPError {
-  if (error instanceof MCPError) {
-    return error;
-  }
-
-  if (error instanceof Error) {
-    return new MCPError(
-      ErrorCode.INTERNAL_ERROR,
-      error.message,
-      500,
-      requestId,
-      { originalError: error.name }
-    );
-  }
-
-  return new MCPError(
-    ErrorCode.INTERNAL_ERROR,
-    'An unknown error occurred',
-    500,
-    requestId,
-    { error: String(error) }
-  );
 }

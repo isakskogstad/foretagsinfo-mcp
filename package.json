@@ -1,49 +1,54 @@
 {
-  "name": "personupplysning-mcp",
-  "version": "0.1.0",
-  "description": "MCP server för personuppgifter och företagssökning i Sverige",
+  "name": "foretagsinfo-mcp",
+  "version": "1.0.0",
+  "description": "MCP server för svensk företagsinformation via Bolagsverkets API",
   "type": "module",
-  "main": "dist/http-server.js",
+  "main": "build/index.js",
+  "bin": {
+    "foretagsinfo-mcp": "build/index.js"
+  },
   "scripts": {
     "build": "tsc",
     "postinstall": "npm run build",
     "dev": "tsx src/index.ts",
     "dev:http": "tsx src/http-server.ts",
-    "start": "node dist/http-server.js",
+    "start": "node build/index.js",
+    "start:http": "node build/http-server.js",
     "test": "vitest",
-    "db:setup": "tsx scripts/setup-supabase.ts",
-    "db:import": "tsx scripts/import-parquet.ts",
-    "test:supabase": "tsx tests/test-supabase.ts"
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [
     "mcp",
     "model-context-protocol",
     "bolagsverket",
-    "personuppgifter",
     "företagsdata",
-    "sweden"
+    "swedish-companies",
+    "sweden",
+    "annual-reports"
   ],
   "author": "Isak Skogstad",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/isakskogstad/foretagsinfo-mcp"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
-    "@supabase/supabase-js": "^2.49.2",
-    "@types/cors": "^2.8.17",
-    "@types/express": "^5.0.0",
-    "@types/node": "^22.10.2",
-    "axios": "^1.13.2",
-    "cors": "^2.8.5",
-    "csv-parse": "^6.1.0",
+    "axios": "^1.7.0",
     "dotenv": "^16.4.7",
-    "express": "^4.21.2",
+    "fast-xml-parser": "^4.3.0",
+    "jszip": "^3.10.1",
     "pino": "^9.5.0",
     "pino-pretty": "^13.0.0",
-    "typescript": "^5.7.2",
     "zod": "^3.24.1"
   },
   "devDependencies": {
-    "@types/pg": "^8.11.10",
+    "@types/node": "^22.10.2",
     "tsx": "^4.21.0",
+    "typescript": "^5.7.2",
     "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

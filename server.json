@@ -1,0 +1,49 @@
+{
+  "$schema": "https://registry.modelcontextprotocol.io/server.schema.json",
+  "name": "io.github.isakskogstad/foretagsinfo-mcp",
+  "title": "Företagsinfo MCP",
+  "description": "MCP server för svensk företagsinformation. Hämta företagsuppgifter, årsredovisningar och finansiella nyckeltal via Bolagsverkets API.",
+  "homepage": "https://github.com/isakskogstad/foretagsinfo-mcp",
+  "vendor": "Isak Skogstad",
+  "license": "MIT",
+  "icon": "https://raw.githubusercontent.com/isakskogstad/foretagsinfo-mcp/main/assets/icon.svg",
+  "category": "data",
+  "tags": [
+    "sweden",
+    "swedish-companies",
+    "bolagsverket",
+    "company-data",
+    "annual-reports",
+    "financial-data"
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://foretagsinfo-mcp.onrender.com/mcp"
+    }
+  ],
+  "tools": [
+    {
+      "name": "get_company",
+      "description": "Hämta företagsinformation från Bolagsverket via organisationsnummer"
+    },
+    {
+      "name": "get_documents",
+      "description": "Lista tillgängliga årsredovisningar för ett företag"
+    },
+    {
+      "name": "get_annual_report",
+      "description": "Hämta och analysera årsredovisning med finansiella nyckeltal"
+    }
+  ],
+  "prompts": [
+    {
+      "name": "analyze_company",
+      "description": "Analysera ett företags finansiella hälsa"
+    },
+    {
+      "name": "compare_companies",
+      "description": "Jämför flera företag"
+    }
+  ]
+}

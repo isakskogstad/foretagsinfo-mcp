@@ -1,0 +1,60 @@
+services:
+  - type: web
+    name: personupplysning-mcp
+    runtime: node
+    region: frankfurt  # EU region for GDPR compliance
+    plan: starter      # $7/month - 512MB RAM, 0.5 CPU (upgrade to standard if needed)
+
+    # Build configuration
+    buildCommand: npm ci --production=false && npm run build
+    startCommand: node dist/http-server.js
+
+    # Auto-scaling (for higher plans)
+    autoDeploy: true
+
+    # Health check configuration
+    healthCheckPath: /health
+
+    # Environment variables
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      - key: MCP_TRANSPORT
+        value: http
+
+      - key: PORT
+        generateValue: true  # Render automatically assigns this
+
+      - key: HOST
+        value: 0.0.0.0
+
+      # Supabase credentials
+      # Add these in Render dashboard: Settings > Environment
+      - key: SUPABASE_URL
+        sync: false
+
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+
+      # Bolagsverket API credentials
+      # Get from: https://portal.api.bolagsverket.se/
+      - key: BOLAGSVERKET_CLIENT_ID
+        sync: false
+
+      - key: BOLAGSVERKET_CLIENT_SECRET
+        sync: false
+
+      # Performance tuning
+      - key: NODE_OPTIONS
+        value: --max-old-space-size=384  # Limit heap to 384MB for starter plan
+
+      # Logging configuration
+      - key: LOG_LEVEL
+        value: info  # Options: trace, debug, info, warn, error
+
+    # Disk configuration (if needed for temporary files)
+    disk:
+      name: tmp-storage
+      mountPath: /tmp
+      sizeGB: 1

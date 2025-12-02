@@ -1,195 +1,117 @@
 /**
- * Input validation utilities for Personupplysning MCP
- * Uses Zod for runtime type validation and sanitization
+ * Input validation with Zod + Luhn checksum
  */
-
 import { z } from 'zod';
+import { InvalidOrgNumberError } from './errors.js';
 
 /**
- * Swedish Organization Number Validator
- * Format: 10 digits (XXXXXX-XXXX or XXXXXXXXXX)
- *
- * Validates and normalizes Swedish organization numbers
+ * Validate Swedish organization number with Luhn checksum
+ * Format: 10 digits (NNNNNN-NNNN), century digit omitted
  */
-export const OrganisationsnummerSchema = z
-  .string()
-  .trim()
-  .regex(/^\d{10}$|^\d{6}-\d{4}$/, 'Invalid Swedish organization number format (expected: XXXXXXXXXX or XXXXXX-XXXX)')
-  .transform((val) => {
-    // Remove any hyphens and return clean 10-digit string
-    const cleaned = val.replace(/[^0-9]/g, '');
-    if (cleaned.length !== 10) {
-      throw new Error('Organization number must be exactly 10 digits');
+export function validateOrgNumber(orgNumber: string, requestId?: string): string {
+  // Remove any hyphens or spaces
+  const cleaned = orgNumber.replace(/[-\s]/g, '');
+
+  // Must be exactly 10 digits
+  if (!/^\d{10}$/.test(cleaned)) {
+    throw new InvalidOrgNumberError(
+      orgNumber,
+      'Must be exactly 10 digits',
+      requestId
+    );
+  }
+
+  // Validate Luhn checksum
+  if (!isValidLuhn(cleaned)) {
+    throw new InvalidOrgNumberError(
+      orgNumber,
+      'Invalid checksum (Luhn validation failed)',
+      requestId
+    );
+  }
+
+  return cleaned;
+}
+
+/**
+ * Luhn algorithm (mod 10) validation
+ * Used for Swedish personnummer and organisationsnummer
+ */
+function isValidLuhn(num: string): boolean {
+  const digits = num.split('').map(Number);
+  let sum = 0;
+
+  for (let i = 0; i < digits.length; i++) {
+    let d = digits[i];
+
+    // Double every second digit from the right (in 10-digit number, that's even positions)
+    if (i % 2 === 0) {
+      d *= 2;
+      if (d > 9) d -= 9;
     }
-    return cleaned;
+
+    sum += d;
+  }
+
+  return sum % 10 === 0;
+}
+
+/**
+ * Calculate Luhn checksum digit
+ */
+export function calculateLuhnChecksum(num: string): number {
+  const digits = num.split('').map(Number);
+  let sum = 0;
+
+  for (let i = 0; i < digits.length; i++) {
+    let d = digits[i];
+    if (i % 2 === 0) {
+      d *= 2;
+      if (d > 9) d -= 9;
+    }
+    sum += d;
+  }
+
+  return (10 - (sum % 10)) % 10;
+}
+
+/**
+ * Zod schema for organization number
+ */
+export const OrgNumberSchema = z
+  .string()
+  .min(10, 'Organization number must be at least 10 characters')
+  .max(13, 'Organization number must be at most 13 characters (with hyphens)')
+  .transform((val) => val.replace(/[-\s]/g, ''))
+  .refine((val) => /^\d{10}$/.test(val), {
+    message: 'Organization number must be exactly 10 digits',
   })
-  .refine((val) => {
-    // Validate Luhn checksum algorithm (same as personnummer)
-    const digits = val.split('').map(Number);
-    const checksum = digits.reduce((sum, digit, index) => {
-      if (index === 9) return sum; // Skip last digit (checksum)
-      let value = digit;
-      if (index % 2 === 0) {
-        value *= 2;
-        if (value > 9) value -= 9;
-      }
-      return sum + value;
-    }, 0);
-    const expectedCheckDigit = (10 - (checksum % 10)) % 10;
-    return digits[9] === expectedCheckDigit;
-  }, 'Invalid organization number checksum');
+  .refine((val) => isValidLuhn(val), {
+    message: 'Invalid organization number checksum',
+  });
 
 /**
- * Search Query Validator
- * Prevents XSS and SQL injection attempts
+ * Schema for get_company tool input
  */
-export const SearchQuerySchema = z
-  .string()
-  .trim()
-  .min(2, 'Search query too short (minimum 2 characters)')
-  .max(200, 'Search query too long (maximum 200 characters)')
-  .refine(
-    (val) => !/(<script|javascript:|on\w+=|<iframe|<svg|<embed|<object|<body|<input|eval\(|atob\()/i.test(val),
-    'Potentially dangerous patterns detected in search query'
-  )
-  .refine(
-    (val) => !/(\bOR\b|\bAND\b|--|;|\/\*|\*\/|xp_|sp_|exec|execute|union|select|insert|update|delete|drop)/i.test(val),
-    'SQL injection patterns detected'
-  );
-
-/**
- * Year Validator
- * For annual reports (1900 - current year + 1)
- */
-export const YearSchema = z
-  .number()
-  .int()
-  .min(1900, 'Year must be 1900 or later')
-  .max(new Date().getFullYear() + 1, `Year cannot be later than ${new Date().getFullYear() + 1}`)
-  .optional();
-
-/**
- * Limit Validator
- * For pagination
- */
-export const LimitSchema = z
-  .number()
-  .int()
-  .min(1, 'Limit must be at least 1')
-  .max(1000, 'Limit cannot exceed 1000')
-  .default(10);
-
-/**
- * Offset Validator
- * For pagination
- */
-export const OffsetSchema = z
-  .number()
-  .int()
-  .min(0, 'Offset cannot be negative')
-  .default(0);
-
-/**
- * Boolean Validator
- * For flags
- */
-export const BooleanSchema = z
-  .boolean()
-  .default(false);
-
-/**
- * Tool Input Schemas
- */
-
-export const SearchCompaniesInputSchema = z.object({
-  query: SearchQuerySchema,
-  limit: LimitSchema,
-  offset: OffsetSchema.optional(),
-  active_only: BooleanSchema.optional(),
+export const GetCompanyInputSchema = z.object({
+  org_number: OrgNumberSchema,
 });
 
-export const GetCompanyDetailsInputSchema = z.object({
-  organisationsidentitet: OrganisationsnummerSchema,
-  force_refresh: BooleanSchema.optional(),
+/**
+ * Schema for get_documents tool input
+ */
+export const GetDocumentsInputSchema = z.object({
+  org_number: OrgNumberSchema,
 });
 
-export const GetCompanyDocumentsInputSchema = z.object({
-  organisationsidentitet: OrganisationsnummerSchema,
-  force_refresh: BooleanSchema.optional(),
-});
-
+/**
+ * Schema for get_annual_report tool input
+ */
 export const GetAnnualReportInputSchema = z.object({
-  organisationsidentitet: OrganisationsnummerSchema,
-  year: YearSchema,
-  force_refresh: BooleanSchema.optional(),
+  org_number: OrgNumberSchema,
+  year: z.number().int().min(1900).max(2100).optional(),
 });
 
-export const GetCacheStatsInputSchema = z.object({
-  include_details: BooleanSchema.optional(),
-});
-
-/**
- * Resource URI Validators
- */
-export const CompanyResourceURISchema = z
-  .string()
-  .regex(/^company:\/\/[a-zA-Z0-9\-\/\?=&]+$/, 'Invalid company resource URI format');
-
-/**
- * Type exports for TypeScript
- */
-export type SearchCompaniesInput = z.infer<typeof SearchCompaniesInputSchema>;
-export type GetCompanyDetailsInput = z.infer<typeof GetCompanyDetailsInputSchema>;
-export type GetCompanyDocumentsInput = z.infer<typeof GetCompanyDocumentsInputSchema>;
+export type GetCompanyInput = z.infer<typeof GetCompanyInputSchema>;
+export type GetDocumentsInput = z.infer<typeof GetDocumentsInputSchema>;
 export type GetAnnualReportInput = z.infer<typeof GetAnnualReportInputSchema>;
-export type GetCacheStatsInput = z.infer<typeof GetCacheStatsInputSchema>;
-
-/**
- * Helper function to validate and sanitize input
- */
-export function validateInput<T>(schema: z.ZodSchema<T>, input: unknown): T {
-  try {
-    return schema.parse(input);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      const messages = error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
-      throw new Error(`Validation error: ${messages}`);
-    }
-    throw error;
-  }
-}
-
-/**
- * Sanitize SQL LIKE pattern
- * Escapes special characters: %, _, \
- */
-export function sanitizeLikePattern(input: string): string {
-  return input
-    .replace(/\\/g, '\\\\')
-    .replace(/%/g, '\\%')
-    .replace(/_/g, '\\_');
-}
-
-/**
- * Validate and format organization number for display
- * Returns formatted version: XXXXXX-XXXX
- */
-export function formatOrganisationsnummer(orgNummer: string): string {
-  const cleaned = orgNummer.replace(/[^0-9]/g, '');
-  if (cleaned.length !== 10) {
-    throw new Error('Invalid organization number');
-  }
-  return `${cleaned.slice(0, 6)}-${cleaned.slice(6)}`;
-}
-
-/**
- * Check if organization number is valid (without throwing)
- */
-export function isValidOrganisationsnummer(orgNummer: string): boolean {
-  try {
-    OrganisationsnummerSchema.parse(orgNummer);
-    return true;
-  } catch {
-    return false;
-  }
-}
