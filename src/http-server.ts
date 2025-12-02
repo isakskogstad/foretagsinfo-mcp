@@ -278,24 +278,37 @@ async function handleHealth(_req: IncomingMessage, res: ServerResponse): Promise
  * Handle MCP SSE connection (GET /mcp)
  */
 async function handleMCPGet(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  const connectionId = crypto.randomUUID();
-  logger.info({ connectionId }, 'New MCP SSE connection');
+  const url = new URL(req.url || '/', `http://${req.headers.host}`);
+  const existingSessionId = url.searchParams.get('sessionId');
+
+  // If sessionId provided, this might be a reconnection or the POST endpoint discovery
+  if (existingSessionId && activeConnections.has(existingSessionId)) {
+    // Return the existing session info
+    res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+    res.write(`event: endpoint\ndata: /mcp?sessionId=${existingSessionId}\n\n`);
+    return;
+  }
 
   const server = createMCPServer();
   const transport = new SSEServerTransport('/mcp', res);
 
-  activeConnections.set(connectionId, transport);
+  // Get the sessionId from transport after it's created
+  // SSEServerTransport generates a sessionId internally
+  const sessionId = (transport as unknown as { _sessionId: string })._sessionId;
+  logger.info({ sessionId }, 'New MCP SSE connection');
+
+  activeConnections.set(sessionId, transport);
 
   req.on('close', () => {
-    logger.info({ connectionId }, 'MCP connection closed');
-    activeConnections.delete(connectionId);
+    logger.info({ sessionId }, 'MCP connection closed');
+    activeConnections.delete(sessionId);
   });
 
   try {
     await server.connect(transport);
   } catch (error) {
-    logger.error({ error, connectionId }, 'MCP connection error');
-    activeConnections.delete(connectionId);
+    logger.error({ error, sessionId }, 'MCP connection error');
+    activeConnections.delete(sessionId);
   }
 }
 
@@ -303,45 +316,54 @@ async function handleMCPGet(req: IncomingMessage, res: ServerResponse): Promise<
  * Handle MCP JSON-RPC request (POST /mcp)
  */
 async function handleMCPPost(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  // Parse request body
-  let body = '';
-  for await (const chunk of req) {
-    body += chunk;
+  const url = new URL(req.url || '/', `http://${req.headers.host}`);
+
+  // Get sessionId from URL query params (primary) or header (fallback)
+  const sessionId = url.searchParams.get('sessionId') || req.headers['x-session-id'] as string;
+
+  logger.debug({ sessionId, activeConnections: activeConnections.size }, 'MCP POST request');
+
+  // Find the transport for this session
+  const transport = sessionId ? activeConnections.get(sessionId) : null;
+
+  if (!transport) {
+    // Parse body to get request id for error response
+    let body = '';
+    for await (const chunk of req) {
+      body += chunk;
+    }
+    let requestId = null;
+    try {
+      const parsed = JSON.parse(body);
+      requestId = parsed.id;
+    } catch {
+      // Ignore parse errors
+    }
+
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      jsonrpc: '2.0',
+      id: requestId,
+      error: {
+        code: -32600,
+        message: 'Invalid session. Connect via GET /mcp first.',
+      },
+    }));
+    return;
   }
 
   try {
-    const request = JSON.parse(body);
-    logger.debug({ method: request.method }, 'MCP JSON-RPC request');
-
-    // Find the transport for this session
-    const sessionId = req.headers['x-session-id'] as string;
-    const transport = sessionId ? activeConnections.get(sessionId) : null;
-
-    if (!transport) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        jsonrpc: '2.0',
-        id: request.id,
-        error: {
-          code: -32600,
-          message: 'Invalid session. Connect via GET /mcp first.',
-        },
-      }));
-      return;
-    }
-
-    // Forward to transport
-    await transport.handlePostMessage(req, res, body);
-
+    // Forward to transport - it handles body parsing
+    await transport.handlePostMessage(req, res);
   } catch (error) {
     logger.error({ error }, 'MCP POST handler error');
-    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       jsonrpc: '2.0',
       id: null,
       error: {
-        code: -32700,
-        message: 'Parse error',
+        code: -32603,
+        message: 'Internal error',
       },
     }));
   }
@@ -367,6 +389,19 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
   logger.debug({ method: req.method, path: url.pathname }, 'HTTP request');
 
   try {
+    // Handle /mcp with or without query params
+    if (url.pathname === '/mcp' || url.pathname.startsWith('/mcp?')) {
+      if (req.method === 'GET') {
+        await handleMCPGet(req, res);
+      } else if (req.method === 'POST') {
+        await handleMCPPost(req, res);
+      } else {
+        res.writeHead(405, { 'Content-Type': 'text/plain' });
+        res.end('Method Not Allowed');
+      }
+      return;
+    }
+
     switch (url.pathname) {
       case '/':
         await handleRoot(req, res);
@@ -374,17 +409,6 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 
       case '/health':
         await handleHealth(req, res);
-        break;
-
-      case '/mcp':
-        if (req.method === 'GET') {
-          await handleMCPGet(req, res);
-        } else if (req.method === 'POST') {
-          await handleMCPPost(req, res);
-        } else {
-          res.writeHead(405, { 'Content-Type': 'text/plain' });
-          res.end('Method Not Allowed');
-        }
         break;
 
       default:
