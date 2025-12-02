@@ -1,10 +1,14 @@
 /**
- * get_board_members tool - Fetch board members and executives from merinfo.se
+ * get_board_members tool - Fetch board members and executives
+ * Primary source: hitta.se (works without JavaScript)
+ * Fallback: merinfo.se
  */
 
 import { logger } from '../utils/logger.js';
 import { GetBoardMembersInputSchema } from '../utils/validators.js';
 import { MCPError, ErrorCode } from '../utils/errors.js';
+import { hittaClient, HittaRateLimitError, HittaCompanyNotFoundError, HittaScrapingError } from '../scrapers/hitta-client.js';
+import { parseHittaCompanyPage } from '../scrapers/hitta-parser.js';
 import { merinfoClient, RateLimitError, CompanyNotFoundError, ScrapingError } from '../scrapers/merinfo-client.js';
 import { parseCompanyPage, findCompanyLinkFromSearch, parsePersonPage } from '../scrapers/merinfo-parser.js';
 import type { BoardMember, BoardMembersResult } from '../api-client/types.js';
@@ -22,7 +26,7 @@ Returnerar:
 - Tillträdesdatum för respektive befattning
 - Länkar till personprofiler (om tillgängliga)
 
-Data hämtas från merinfo.se via webscraping.
+Data hämtas primärt från hitta.se (med merinfo.se som fallback).
 
 Begränsningar:
 - Rate limiting tillämpas (max ~20 förfrågningar/minut)
@@ -132,6 +136,144 @@ function formatBoardMembersResponse(result: BoardMembersResult): string {
 }
 
 /**
+ * Try to fetch board members from hitta.se
+ */
+async function fetchFromHitta(
+  orgNumber: string,
+  childLogger: typeof logger
+): Promise<BoardMembersResult | null> {
+  try {
+    childLogger.info({ orgNumber, source: 'hitta.se' }, 'Trying hitta.se');
+
+    // Fetch company page from hitta.se
+    const $ = await hittaClient.fetchCompanyPage(orgNumber);
+
+    // Parse company data
+    const companyData = parseHittaCompanyPage($, orgNumber);
+
+    if (companyData.boardMembers.length > 0) {
+      childLogger.info(
+        { memberCount: companyData.boardMembers.length, source: 'hitta.se' },
+        'Found board members on hitta.se'
+      );
+
+      return {
+        orgNumber: companyData.orgNumber,
+        companyName: companyData.name,
+        boardMembers: companyData.boardMembers.map(m => ({
+          name: m.name,
+          age: m.age,
+          city: m.city,
+          roles: m.roles,
+          appointedDate: m.appointedDate,
+        })),
+        source: 'hitta.se',
+        scrapedAt: companyData.scrapedAt,
+      };
+    }
+
+    childLogger.debug('No board members found on hitta.se');
+    return null;
+  } catch (error) {
+    if (error instanceof HittaRateLimitError) {
+      childLogger.warn('Rate limit hit on hitta.se');
+      throw error;
+    }
+    if (error instanceof HittaCompanyNotFoundError) {
+      childLogger.debug('Company not found on hitta.se');
+      return null;
+    }
+    childLogger.warn({ error }, 'Error fetching from hitta.se');
+    return null;
+  }
+}
+
+/**
+ * Try to fetch board members from merinfo.se (fallback)
+ */
+async function fetchFromMerinfo(
+  orgNumber: string,
+  includePersonalDetails: boolean,
+  childLogger: typeof logger
+): Promise<BoardMembersResult | null> {
+  try {
+    childLogger.info({ orgNumber, source: 'merinfo.se' }, 'Trying merinfo.se');
+
+    // Search for company
+    const $search = await merinfoClient.searchCompany(orgNumber);
+
+    // Find company link from search results
+    const companyLink = findCompanyLinkFromSearch($search, orgNumber);
+
+    if (!companyLink) {
+      childLogger.debug('Company not found on merinfo.se');
+      return null;
+    }
+
+    // Fetch company page
+    const $company = await merinfoClient.fetchCompanyPage(companyLink);
+
+    // Parse company data
+    const companyData = parseCompanyPage($company, orgNumber);
+
+    childLogger.info(
+      { memberCount: companyData.boardMembers.length, source: 'merinfo.se' },
+      'Found board members on merinfo.se'
+    );
+
+    // Optionally fetch extended person details
+    let boardMembers = companyData.boardMembers;
+
+    if (includePersonalDetails && boardMembers.length > 0) {
+      childLogger.info('Fetching extended personal details');
+
+      const enhancedMembers: BoardMember[] = [];
+
+      for (const member of boardMembers) {
+        if (member.profileUrl) {
+          try {
+            const url = new URL(member.profileUrl);
+            const $person = await merinfoClient.fetchPersonPage(url.pathname);
+            const personDetails = parsePersonPage($person);
+
+            enhancedMembers.push({
+              ...member,
+              age: personDetails.age || member.age,
+              city: personDetails.address?.city || member.city,
+            });
+          } catch (error) {
+            enhancedMembers.push(member);
+          }
+        } else {
+          enhancedMembers.push(member);
+        }
+      }
+
+      boardMembers = enhancedMembers;
+    }
+
+    return {
+      orgNumber,
+      companyName: companyData.name,
+      boardMembers,
+      source: 'merinfo.se',
+      scrapedAt: companyData.scrapedAt,
+    };
+  } catch (error) {
+    if (error instanceof RateLimitError) {
+      childLogger.warn('Rate limit hit on merinfo.se');
+      throw error;
+    }
+    if (error instanceof CompanyNotFoundError) {
+      childLogger.debug('Company not found on merinfo.se');
+      return null;
+    }
+    childLogger.warn({ error }, 'Error fetching from merinfo.se');
+    return null;
+  }
+}
+
+/**
  * Execute the get_board_members tool
  */
 export async function executeGetBoardMembers(
@@ -150,98 +292,24 @@ export async function executeGetBoardMembers(
 
     childLogger.info({ orgNumber }, 'Fetching board members');
 
-    // Step 1: Search for company
-    let $search;
-    try {
-      $search = await merinfoClient.searchCompany(orgNumber);
-    } catch (error) {
-      if (error instanceof RateLimitError) {
-        childLogger.warn('Rate limit hit');
-        return {
-          content: [{
-            type: 'text',
-            text: formatBoardMembersResponse({
-              orgNumber,
-              companyName: 'Okänt',
-              boardMembers: [],
-              source: 'merinfo.se',
-              scrapedAt: new Date().toISOString(),
-              partial: true,
-              error: 'Rate limit nådd - försök igen om några minuter.',
-            }),
-          }],
-        };
-      }
-      throw error;
+    // Try hitta.se first (primary source - works without JavaScript)
+    let result = await fetchFromHitta(orgNumber, childLogger);
+
+    // Fallback to merinfo.se if hitta.se fails
+    if (!result) {
+      result = await fetchFromMerinfo(orgNumber, input.include_personal_details, childLogger);
     }
 
-    // Step 2: Find company link from search results
-    const companyLink = findCompanyLinkFromSearch($search, orgNumber);
-
-    if (!companyLink) {
-      throw new CompanyNotFoundError(orgNumber);
+    // If neither source worked
+    if (!result) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Företaget ${orgNumber} hittades inte på hitta.se eller merinfo.se. Kontrollera organisationsnumret.`,
+        }],
+        isError: true,
+      };
     }
-
-    childLogger.debug({ companyLink }, 'Found company link');
-
-    // Step 3: Fetch company page
-    const $company = await merinfoClient.fetchCompanyPage(companyLink);
-
-    // Step 4: Parse company data
-    const companyData = parseCompanyPage($company, orgNumber);
-
-    childLogger.info(
-      { memberCount: companyData.boardMembers.length },
-      'Parsed board members'
-    );
-
-    // Step 5: Optionally fetch extended person details
-    let boardMembers = companyData.boardMembers;
-
-    if (input.include_personal_details && boardMembers.length > 0) {
-      childLogger.info('Fetching extended personal details');
-
-      const enhancedMembers: BoardMember[] = [];
-
-      for (const member of boardMembers) {
-        if (member.profileUrl) {
-          try {
-            // Extract path from full URL
-            const url = new URL(member.profileUrl);
-            const $person = await merinfoClient.fetchPersonPage(url.pathname);
-            const personDetails = parsePersonPage($person);
-
-            enhancedMembers.push({
-              ...member,
-              age: personDetails.age || member.age,
-              city: personDetails.address?.city || member.city,
-            });
-
-            childLogger.debug({ name: member.name }, 'Fetched personal details');
-          } catch (error) {
-            // Continue with basic info if person page fails
-            childLogger.warn(
-              { name: member.name, error },
-              'Failed to fetch personal details'
-            );
-            enhancedMembers.push(member);
-          }
-        } else {
-          enhancedMembers.push(member);
-        }
-      }
-
-      boardMembers = enhancedMembers;
-    }
-
-    // Build result
-    const result: BoardMembersResult = {
-      orgNumber,
-      companyName: companyData.name,
-      boardMembers,
-      source: 'merinfo.se',
-      scrapedAt: companyData.scrapedAt,
-    };
 
     return {
       content: [{ type: 'text', text: formatBoardMembersResponse(result) }],
@@ -249,27 +317,17 @@ export async function executeGetBoardMembers(
   } catch (error) {
     childLogger.error({ error }, 'Failed to get board members');
 
-    if (error instanceof RateLimitError) {
+    if (error instanceof HittaRateLimitError || error instanceof RateLimitError) {
       return {
         content: [{
           type: 'text',
-          text: 'Sökgräns nådd på merinfo.se. Försök igen om några minuter.',
+          text: 'Sökgräns nådd. Försök igen om några minuter.',
         }],
         isError: true,
       };
     }
 
-    if (error instanceof CompanyNotFoundError) {
-      return {
-        content: [{
-          type: 'text',
-          text: `Företaget hittades inte på merinfo.se. Kontrollera organisationsnumret.`,
-        }],
-        isError: true,
-      };
-    }
-
-    if (error instanceof ScrapingError) {
+    if (error instanceof HittaScrapingError || error instanceof ScrapingError) {
       return {
         content: [{
           type: 'text',

@@ -277,7 +277,7 @@ export interface BoardMembersResult {
   orgNumber: string;
   companyName: string;
   boardMembers: BoardMember[];
-  source: 'merinfo.se';
+  source: 'hitta.se' | 'merinfo.se';
   scrapedAt: string;
   partial?: boolean;
   error?: string;
