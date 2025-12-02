@@ -197,3 +197,88 @@ export interface CompanyInfo {
   deregistrationDate?: string;
   businessDescription?: string;
 }
+
+// ===========================================
+// Merinfo.se Scraper Types
+// ===========================================
+
+/**
+ * Board member from merinfo.se
+ */
+export interface BoardMember {
+  name: string;
+  age?: number;
+  city?: string;
+  roles: string[];
+  appointedDate?: string;
+  profileUrl?: string;
+}
+
+/**
+ * Extended person details (from person page)
+ */
+export interface PersonDetails {
+  name: string;
+  age?: number;
+  address?: {
+    street?: string;
+    apartment?: string;
+    postalCode?: string;
+    city?: string;
+  };
+  phones?: Array<{ number: string; owner?: string }>;
+}
+
+/**
+ * Company data from merinfo.se scraping
+ */
+export interface MerinfoCompanyData {
+  orgNumber: string;
+  name: string;
+  legalForm?: string;
+  status?: string;
+  registrationDate?: string;
+  remarks?: string;
+  contact?: {
+    phone?: string;
+    address?: string;
+    postalCode?: string;
+    city?: string;
+    municipality?: string;
+    county?: string;
+  };
+  taxInfo?: {
+    fSkatt?: boolean;
+    vatRegistered?: boolean;
+    employerRegistered?: boolean;
+  };
+  financials?: {
+    period?: string;
+    currency?: string;
+    revenue?: number;
+    profitAfterFinancialItems?: number;
+    netProfit?: number;
+    totalAssets?: number;
+  };
+  industry?: {
+    sniCode?: string;
+    sniDescription?: string;
+    categories?: string[];
+    activityDescription?: string;
+  };
+  boardMembers: BoardMember[];
+  scrapedAt: string;
+}
+
+/**
+ * Result from get_board_members tool
+ */
+export interface BoardMembersResult {
+  orgNumber: string;
+  companyName: string;
+  boardMembers: BoardMember[];
+  source: 'merinfo.se';
+  scrapedAt: string;
+  partial?: boolean;
+  error?: string;
+}

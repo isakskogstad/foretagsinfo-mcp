@@ -5,6 +5,7 @@
 import { GET_COMPANY_TOOL, executeGetCompany } from './get-company.js';
 import { GET_DOCUMENTS_TOOL, executeGetDocuments } from './get-documents.js';
 import { GET_ANNUAL_REPORT_TOOL, executeGetAnnualReport } from './get-annual-report.js';
+import { GET_BOARD_MEMBERS_TOOL, executeGetBoardMembers } from './get-board-members.js';
 
 /**
  * All available tools
@@ -13,6 +14,7 @@ export const TOOLS = [
   GET_COMPANY_TOOL,
   GET_DOCUMENTS_TOOL,
   GET_ANNUAL_REPORT_TOOL,
+  GET_BOARD_MEMBERS_TOOL,
 ] as const;
 
 /**
@@ -33,6 +35,7 @@ export const TOOL_EXECUTORS: Record<
   get_company: executeGetCompany,
   get_documents: executeGetDocuments,
   get_annual_report: executeGetAnnualReport,
+  get_board_members: executeGetBoardMembers,
 };
 
 /**
@@ -59,3 +62,4 @@ export async function executeTool(
 export { GET_COMPANY_TOOL, executeGetCompany } from './get-company.js';
 export { GET_DOCUMENTS_TOOL, executeGetDocuments } from './get-documents.js';
 export { GET_ANNUAL_REPORT_TOOL, executeGetAnnualReport } from './get-annual-report.js';
+export { GET_BOARD_MEMBERS_TOOL, executeGetBoardMembers } from './get-board-members.js';

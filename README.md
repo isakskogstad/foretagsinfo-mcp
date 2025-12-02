@@ -9,6 +9,7 @@ Hämta företagsinformation direkt i Claude och andra AI-assistenter:
 - **Företagsuppgifter** - Namn, organisationsform, SNI-koder, adress, registreringsdatum
 - **Årsredovisningar** - Lista och analysera digitala årsredovisningar
 - **Finansiella nyckeltal** - Omsättning, resultat, soliditet, antal anställda
+- **Styrelse och ledning** - Hämta styrelsemedlemmar, VD och befattningshavare
 - **Analysmallar** - Färdiga prompts för företagsanalys och jämförelser
 
 ## Tillgängliga verktyg
@@ -18,6 +19,7 @@ Hämta företagsinformation direkt i Claude och andra AI-assistenter:
 | `get_company` | Hämta företagsuppgifter via organisationsnummer |
 | `get_documents` | Lista tillgängliga årsredovisningar |
 | `get_annual_report` | Hämta och analysera årsredovisning |
+| `get_board_members` | Hämta styrelse och befattningshavare (via merinfo.se) |
 
 ## Snabbstart
 
@@ -96,6 +98,12 @@ Analysera senaste årsredovisningen för H&M (org.nr 5560427220)
 Jämför de finansiella nyckeltalen för Volvo (5560743089) och Scania (5560000035)
 ```
 
+### Hämta styrelse
+
+```
+Vilka sitter i styrelsen för H&M (org.nr 5560427220)?
+```
+
 ## API-begränsningar
 
 - **Endast organisationsnummer** - Namnsökning stöds inte
@@ -112,10 +120,16 @@ foretagsinfo-mcp/
 │   ├── api-client/
 │   │   ├── bolagsverket.ts   # OAuth2 + API-klient
 │   │   └── types.ts          # TypeScript-typer
+│   ├── scrapers/
+│   │   ├── merinfo-client.ts # HTTP-klient för merinfo.se
+│   │   ├── merinfo-parser.ts # HTML-parser
+│   │   ├── selectors.ts      # CSS-selektorer
+│   │   └── rate-limiter.ts   # Rate limiting
 │   ├── tools/
 │   │   ├── get-company.ts
 │   │   ├── get-documents.ts
-│   │   └── get-annual-report.ts
+│   │   ├── get-annual-report.ts
+│   │   └── get-board-members.ts
 │   ├── resources/            # URI-baserade resurser
 │   ├── prompts/              # Analysmallar
 │   └── utils/

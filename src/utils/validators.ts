@@ -112,6 +112,15 @@ export const GetAnnualReportInputSchema = z.object({
   year: z.number().int().min(1900).max(2100).optional(),
 });
 
+/**
+ * Schema for get_board_members tool input
+ */
+export const GetBoardMembersInputSchema = z.object({
+  org_number: OrgNumberSchema,
+  include_personal_details: z.boolean().default(false),
+});
+
 export type GetCompanyInput = z.infer<typeof GetCompanyInputSchema>;
 export type GetDocumentsInput = z.infer<typeof GetDocumentsInputSchema>;
 export type GetAnnualReportInput = z.infer<typeof GetAnnualReportInputSchema>;
+export type GetBoardMembersInput = z.infer<typeof GetBoardMembersInputSchema>;
